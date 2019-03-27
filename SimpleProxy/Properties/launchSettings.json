@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "SimpleProxy": {
+      "commandName": "Project",
+      "commandLineArgs": " -s 47.98.132.45:9974/127.0.0.1:3389"
+    }
+  }
+}

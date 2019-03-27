@@ -1,58 +1,40 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
+﻿using System.IO;
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace SimpleProxy
 {
     public class ListenerService : IHostedService
     {
         private readonly ILogger<ListenerService> _logger;
+        private readonly IPEndPointMapping _portMapping;
 
-        public ListenerService(ILogger<ListenerService> logger)
+        public ListenerService(ILogger<ListenerService> logger, IOptions<IPEndPointMapping> portMapping)
         {
             _logger = logger;
+            _portMapping = portMapping.Value;
         }
 
         public async Task StartAsync(CancellationToken cancellationToken)
         {
-            TcpListener tcpListener = new TcpListener(IPAddress.Any, 7777);
-            tcpListener.Start();
-            while (true)
-            {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    break;
-                }
+            (IPEndPoint ipEndPoint0, IPEndPoint ipEndPoint1) = _portMapping.Mapping;
 
-                TcpClient tcpClient = await tcpListener.AcceptTcpClientAsync();
-                _ = ProcessTcpClient(tcpClient, cancellationToken);
-            }
-        }
+            TcpListener tcpListener0 = new TcpListener(ipEndPoint0);
+            TcpListener tcpListener1 = new TcpListener(ipEndPoint1);
+            tcpListener0.Start();
+            tcpListener1.Start();
 
-        private async Task ProcessTcpClient(TcpClient clientClient, CancellationToken cancellationToken)
-        {
-            if (cancellationToken.IsCancellationRequested)
-            {
-                await Task.CompletedTask;
-            }
+            Task<TcpClient> task0 = tcpListener0.AcceptTcpClientAsync();
+            Task<TcpClient> task1 = tcpListener1.AcceptTcpClientAsync();
 
-            TcpListener proxyListener = new TcpListener(IPAddress.Any, 9974);
-            TcpClient proxyClient = await proxyListener.AcceptTcpClientAsync();
+            TcpClient[] tcpClients = await Task.WhenAll(task0, task1);
 
-            NetworkStream proxyStream = proxyClient.GetStream();
-            NetworkStream clientStream = clientClient.GetStream();
-
-            await RelayStreamAsync(proxyStream, clientStream, cancellationToken);
-
-            proxyClient.Dispose();
-            clientClient.Dispose();
+            _ = ForwardStreamAsync(tcpClients[0].GetStream(), tcpClients[1].GetStream(), cancellationToken);
         }
 
         public Task StopAsync(CancellationToken cancellationToken)
@@ -60,7 +42,7 @@ namespace SimpleProxy
             return Task.CompletedTask;
         }
 
-        private async Task RelayStreamAsync(Stream proxyStream, Stream localStream, CancellationToken cancellationToken)
+        private async Task ForwardStreamAsync(Stream proxyStream, Stream localStream, CancellationToken cancellationToken)
         {
             await Task.WhenAny(
                 proxyStream.CopyToAsync(localStream, cancellationToken),
