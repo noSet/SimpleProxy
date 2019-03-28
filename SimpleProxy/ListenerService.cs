@@ -23,18 +23,33 @@ namespace SimpleProxy
         public async Task StartAsync(CancellationToken cancellationToken)
         {
             (IPEndPoint ipEndPoint0, IPEndPoint ipEndPoint1) = _portMapping.Mapping;
+            MappingType mappingType = _portMapping.MappingType;
 
-            TcpListener tcpListener0 = new TcpListener(ipEndPoint0);
-            TcpListener tcpListener1 = new TcpListener(ipEndPoint1);
-            tcpListener0.Start();
-            tcpListener1.Start();
+            if (mappingType == MappingType.Prot2Prot)
+            {
+                TcpListener tcpListener0 = new TcpListener(ipEndPoint0);
+                TcpListener tcpListener1 = new TcpListener(ipEndPoint1);
+                tcpListener0.Start();
+                tcpListener1.Start();
 
-            Task<TcpClient> task0 = tcpListener0.AcceptTcpClientAsync();
-            Task<TcpClient> task1 = tcpListener1.AcceptTcpClientAsync();
+                Task<TcpClient> task0 = tcpListener0.AcceptTcpClientAsync();
+                Task<TcpClient> task1 = tcpListener1.AcceptTcpClientAsync();
 
-            TcpClient[] tcpClients = await Task.WhenAll(task0, task1);
+                TcpClient[] tcpClients = await Task.WhenAll(task0, task1);
 
-            _ = ForwardStreamAsync(tcpClients[0].GetStream(), tcpClients[1].GetStream(), cancellationToken);
+                _ = ForwardStreamAsync(tcpClients[0].GetStream(), tcpClients[1].GetStream(), cancellationToken);
+            }
+            else
+            {
+                TcpClient tcpClient0 = new TcpClient();
+                TcpClient tcpClient1 = new TcpClient();
+                Task task0 = tcpClient0.ConnectAsync(ipEndPoint0.Address, ipEndPoint0.Port);
+                Task task1 = tcpClient1.ConnectAsync(ipEndPoint1.Address, ipEndPoint1.Port);
+
+                await Task.WhenAll(task0, task1);
+
+                _ = ForwardStreamAsync(tcpClient0.GetStream(), tcpClient1.GetStream(), cancellationToken);
+            }
         }
 
         public Task StopAsync(CancellationToken cancellationToken)

@@ -39,7 +39,11 @@ namespace SimpleProxy
                 })
                 .ConfigureServices((hostContext, services) =>
                 {
-                    services.AddOptions().Configure<IPEndPointMapping>(portmapping => portmapping.Mapping = GetMapping(hostContext.Configuration));
+                    services.AddOptions().Configure<IPEndPointMapping>(portmapping =>
+                    {
+                        portmapping.Mapping = GetMapping(hostContext.Configuration);
+                        portmapping.MappingType = hostContext.Configuration.GetSection("listen").Value == null ? MappingType.Host2Host : MappingType.Prot2Prot;
+                    });
 
                     services.AddHostedService<ListenerService>();
                 })
